@@ -31,6 +31,9 @@ import (
 
 	"github.com/vkuznet/x509proxy"
 	"golang.org/x/net/http2"
+	"encoding/json"
+	"strconv"
+	"math/rand"
 )
 
 // Return client X509 certificates
@@ -115,7 +118,17 @@ type Work struct {
 	// X509 certificates
 	Certs []tls.Certificate
 
+	//Randomizes credential name every request
+	RandomizeName bool
+
 	results chan *result
+}
+
+type JSONRequest struct {
+	Name 		string		`json:"name,omitempty"`
+	Type		string		`json:"type,omitempty"`
+	Value		interface{}	`json:"value,omitempty"`
+	Overwrite	bool		`json:"overwrite,omitempty"`
 }
 
 // displayProgress outputs the displays until stopCh returns a value.
@@ -142,6 +155,8 @@ func (b *Work) displayProgress(stopCh chan struct{}) {
 // Run makes all the requests, prints the summary. It blocks until
 // all work is done.
 func (b *Work) Run() {
+	b.results = make(chan *result, b.N)
+
 	// append hey's user agent
 	ua := b.Request.UserAgent()
 	if ua == "" {
@@ -182,7 +197,7 @@ func (b *Work) makeRequest(c *http.Client) {
 	var code int
 	var dnsStart, connStart, resStart, reqStart, delayStart time.Time
 	var dnsDuration, connDuration, resDuration, reqDuration, delayDuration time.Duration
-	req := cloneRequest(b.Request, b.RequestBody)
+	req := cloneRequest(b.Request, b.RequestBody, b.RandomizeName)
 	if b.EnableTrace {
 		trace := &httptrace.ClientTrace{
 			DNSStart: func(info httptrace.DNSStartInfo) {
@@ -243,7 +258,7 @@ func (b *Work) runWorker(n int) {
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			Certificates:       Certs(),
+			Certificates:       b.Certs,
 			InsecureSkipVerify: true,
 		},
 		DisableCompression: b.DisableCompression,
@@ -280,7 +295,7 @@ func (b *Work) runWorkers() {
 
 // cloneRequest returns a clone of the provided *http.Request.
 // The clone is a shallow copy of the struct and its Header map.
-func cloneRequest(r *http.Request, body []byte) *http.Request {
+func cloneRequest(r *http.Request, body []byte, randomizeName bool) *http.Request {
 	// shallow copy of the struct
 	r2 := new(http.Request)
 	*r2 = *r
@@ -289,8 +304,26 @@ func cloneRequest(r *http.Request, body []byte) *http.Request {
 	for k, s := range r.Header {
 		r2.Header[k] = append([]string(nil), s...)
 	}
-	if len(body) > 0 {
-		r2.Body = ioutil.NopCloser(bytes.NewReader(body))
+
+	if randomizeName {
+		request := JSONRequest{}
+		err := json.Unmarshal(body, &request)
+		if err != nil {
+			fmt.Errorf("Failed to parse request body: %#v\n", err)
+			return nil
+		}
+
+		request.Name = strconv.Itoa(rand.Int())
+		requestJson, err := json.Marshal(request)
+		if err != nil {
+			fmt.Errorf("Failed to marshall request to JSON: %#v\n", err)
+			return nil
+		}
+		r2.Body = ioutil.NopCloser(bytes.NewReader(requestJson))
+	} else {
+		if len(body) > 0 {
+			r2.Body = ioutil.NopCloser(bytes.NewReader(body))
+		}
 	}
 	return r2
 }
