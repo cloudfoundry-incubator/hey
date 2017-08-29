@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"encoding/json"
 )
 
 func TestN(t *testing.T) {
@@ -108,6 +109,45 @@ func TestRequest(t *testing.T) {
 	if auth != "Basic dXNlcm5hbWU6cGFzc3dvcmQ=" {
 		t.Errorf("Basic authorization is not properly set")
 	}
+}
+
+func TestRequestNameRandomizer(t *testing.T) {
+	var name string
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		buffer := new(bytes.Buffer)
+		buffer.ReadFrom(r.Body)
+		request := JSONRequest{}
+		err := json.Unmarshal(buffer.Bytes(), &request)
+
+		if err != nil {
+			t.Errorf("Failed to parse request body: %#v\n", err)
+		}
+
+		name = request.Name
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	header := make(http.Header)
+	header.Add("Content-type", "text/html")
+	header.Add("X-some", "value")
+
+	requestBody := []byte(`{"name":"not random","other":"value"}`)
+	req, _ := http.NewRequest("POST", server.URL, bytes.NewBuffer([]byte("")))
+	req.Header = header
+	w := &Work{
+		Request: req,
+		RequestBody: requestBody,
+		N:       1,
+		C:       1,
+		RandomizeName: true,
+	}
+	w.Run()
+
+	if name == "not random" {
+		t.Errorf("random name in json body expected, \"not random\" was found")
+	}
+
 }
 
 func TestBody(t *testing.T) {

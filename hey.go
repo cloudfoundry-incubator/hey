@@ -27,7 +27,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/rakyll/hey/requester"
+	"github.com/cloudfoundry-incubator/hey/requester"
 	"github.com/vkuznet/x509proxy"
 )
 
@@ -69,9 +69,10 @@ var (
 
 	cpus = flag.Int("cpus", runtime.GOMAXPROCS(-1), "")
 
-	disableCompression = flag.Bool("disable-compression", false, "")
-	disableKeepAlives  = flag.Bool("disable-keepalive", false, "")
-	proxyAddr          = flag.String("x", "", "")
+	randomizeCredentialName = flag.Bool("rand", false, "")
+	disableCompression 		= flag.Bool("disable-compression", false, "")
+	disableKeepAlives  		= flag.Bool("disable-keepalive", false, "")
+	proxyAddr          		= flag.String("x", "", "")
 
 	enableTrace = flag.Bool("more", false, "")
 )
@@ -106,6 +107,7 @@ Options:
                         connections between different HTTP requests.
   -cpus                 Number of used cpu cores.
                         (default for current machine is %d cores)
+  -rand					Randomize the credential name for every request.
   -more                 Provides information on DNS lookup, dialup, request and
                         response timings.
 `
@@ -227,6 +229,7 @@ func main() {
 		Certs:              certs,
 		Output:             *output,
 		EnableTrace:        *enableTrace,
+		RandomizeName:		*randomizeCredentialName,
 	}).Run()
 }
 
