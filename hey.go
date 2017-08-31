@@ -27,7 +27,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/rakyll/hey/requester"
+	"github.com/cloudfoundry-incubator/hey/requester"
 	"github.com/vkuznet/x509proxy"
 )
 

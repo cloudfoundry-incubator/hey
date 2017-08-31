@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"golang.org/x/net/http2"
+	"fmt"
 )
 
 const heyUA = "hey/0.0.1"
