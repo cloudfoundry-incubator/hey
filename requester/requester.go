@@ -29,38 +29,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vkuznet/x509proxy"
 	"golang.org/x/net/http2"
 	"encoding/json"
 	"strconv"
 	"math/rand"
 )
-
-// Return client X509 certificates
-func Certs() (tls_certs []tls.Certificate) {
-	uproxy := os.Getenv("X509_USER_PROXY")
-	uckey := os.Getenv("X509_USER_KEY")
-	ucert := os.Getenv("X509_USER_CERT")
-	if len(uproxy) > 0 {
-		// use local implementation of LoadX409KeyPair instead of tls one
-		x509cert, err := x509proxy.LoadX509Proxy(uproxy)
-		if err != nil {
-			fmt.Println("Fail to parser proxy X509 certificate", err)
-			return
-		}
-		tls_certs = []tls.Certificate{x509cert}
-	} else if len(uckey) > 0 {
-		x509cert, err := tls.LoadX509KeyPair(ucert, uckey)
-		if err != nil {
-			fmt.Println("Fail to parser user X509 certificate", err)
-			return
-		}
-		tls_certs = []tls.Certificate{x509cert}
-	} else {
-		return
-	}
-	return
-}
 
 const heyUA = "hey/0.0.1"
 
@@ -131,27 +104,6 @@ type JSONRequest struct {
 	Overwrite	bool		`json:"overwrite,omitempty"`
 }
 
-// displayProgress outputs the displays until stopCh returns a value.
-func (b *Work) displayProgress(stopCh chan struct{}) {
-	if b.Output != "" {
-		return
-	}
-
-	var prev int
-	for {
-		select {
-		case <-stopCh:
-			return
-		case <-time.Tick(time.Millisecond * 500):
-			n := len(b.results)
-			if prev < n {
-				prev = n
-				fmt.Printf("%d requests done.\n", n)
-			}
-		}
-	}
-}
-
 // Run makes all the requests, prints the summary. It blocks until
 // all work is done.
 func (b *Work) Run() {
@@ -163,30 +115,18 @@ func (b *Work) Run() {
 		ua += " " + heyUA
 	}
 
-	b.results = make(chan *result, b.N)
-
-	stopCh := make(chan struct{})
-	go b.displayProgress(stopCh)
-
 	start := time.Now()
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		<-c
-		stopCh <- struct{}{}
-		close(b.results)
 		newReport(b.N, b.results, b.Output, time.Now().Sub(start), b.EnableTrace).finalize()
 		os.Exit(1)
 	}()
 
 	b.runWorkers()
-	stopCh <- struct{}{}
-	if b.Output == "" {
-		fmt.Println("All requests done.")
-	}
-
-	close(b.results)
 	newReport(b.N, b.results, b.Output, time.Now().Sub(start), b.EnableTrace).finalize()
+	close(b.results)
 }
 
 func (b *Work) makeRequest(c *http.Client) {
@@ -256,7 +196,7 @@ func (b *Work) runWorker(n int) {
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			Certificates:       Certs(),
+			Certificates:       b.Certs,
 			InsecureSkipVerify: true,
 		},
 		DisableCompression: b.DisableCompression,
