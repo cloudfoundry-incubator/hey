@@ -256,7 +256,7 @@ func (b *Work) runWorker(n int) {
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			Certificates:       b.Certs,
+			Certificates:       Certs(),
 			InsecureSkipVerify: true,
 		},
 		DisableCompression: b.DisableCompression,
