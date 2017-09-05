@@ -104,26 +104,6 @@ type JSONRequest struct {
 	Overwrite	bool		`json:"overwrite,omitempty"`
 }
 
-// displayProgress outputs the displays until stopCh returns a value.
-func (b *Work) displayProgress(stopCh chan struct{}) {
-	if b.Output != "" {
-		return
-	}
-
-	var prev int
-	for {
-		select {
-		case <-stopCh:
-			return
-		case <-time.Tick(time.Millisecond * 500):
-			n := len(b.results)
-			if prev < n {
-				prev = n
-				fmt.Printf("%d requests done.\n", n)
-			}
-		}
-	}
-}
 
 // Run makes all the requests, prints the summary. It blocks until
 // all work is done.
@@ -139,7 +119,6 @@ func (b *Work) Run() {
 	b.results = make(chan *result, b.N)
 
 	stopCh := make(chan struct{})
-	go b.displayProgress(stopCh)
 
 	start := time.Now()
 	c := make(chan os.Signal, 1)
@@ -153,6 +132,7 @@ func (b *Work) Run() {
 	}()
 
 	b.runWorkers()
+	fmt.Println("Workers done running")
 	stopCh <- struct{}{}
 	if b.Output == "" {
 		fmt.Println("All requests done.")
@@ -225,6 +205,7 @@ func (b *Work) runWorker(n int) {
 	var throttle <-chan time.Time
 	if b.QPS > 0 {
 		throttle = time.Tick(time.Duration(1e6/(b.QPS)) * time.Microsecond)
+		fmt.Printf("throttle = %i\n", throttle)
 	}
 
 	tr := &http.Transport{
@@ -242,6 +223,7 @@ func (b *Work) runWorker(n int) {
 		tr.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
 	}
 	client := &http.Client{Transport: tr, Timeout: time.Duration(b.Timeout) * time.Second}
+	fmt.Printf("Making %i requests\n", n)
 	for i := 0; i < n; i++ {
 		if b.QPS > 0 {
 			<-throttle
@@ -256,6 +238,7 @@ func (b *Work) runWorkers() {
 
 	// Ignore the case where b.N % b.C != 0.
 	for i := 0; i < b.C; i++ {
+		fmt.Printf("Worker %i started running\n", i)
 		go func() {
 			b.runWorker(b.N / b.C)
 			wg.Done()
