@@ -107,6 +107,8 @@ type JSONRequest struct {
 // Run makes all the requests, prints the summary. It blocks until
 // all work is done.
 func (b *Work) Run() {
+	b.results = make(chan *result, b.N)
+
 	// append hey's user agent
 	ua := b.Request.UserAgent()
 	if ua == "" {
